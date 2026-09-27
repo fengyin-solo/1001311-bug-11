@@ -1,4 +1,4 @@
-"""泵站运行接口：维护水泵机组，覆盖切换备用、故障停机、启用备用等动作。"""
+"""泵站运行接口：维护水泵机组，覆盖状态流转、运行数据分项提交与清单导出。"""
 from __future__ import annotations
 
 from typing import Any
@@ -6,20 +6,28 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 
 from app.schemas import ActionResult, EntryPayload, PageResult
-from app.services.pump import PumpService
+from app.services.pump import STATUS_ORDER, PumpService
 
 router = APIRouter(prefix="/api/pump", tags=["泵站运行"])
 
 service = PumpService()
 
 LIST_FIELDS = ["机组编号", "所属厂站", "水泵型号", "额定流量", "运行电流", "累计运行时间", "轴承温度", "机组状态"]
-STATUSES = ["运行", "备用", "故障", "停用"]
+STATUSES = STATUS_ORDER
+
+
+# 注意：静态路径必须排在 /{entry_id} 之前，否则 export 会被当成机组编号
+@router.get("/export")
+def export_entries() -> dict[str, Any]:
+    """导出泵站运行清单：返回当前全部机组的最新数据。"""
+    items, total = service.list_entries(page=1, size=10000)
+    return {"module": "pump", "total": total, "items": items}
 
 
 @router.get("", response_model=PageResult[dict])
 def list_entries(
     keyword: str | None = Query(default=None, description="按机组编号检索"),
-    status: str | None = Query(default=None, description="运行、备用、故障、停用"),
+    status: str | None = Query(default=None, description="运行、备用、故障、已停机"),
     page: int = 1,
     size: int = 20,
 ) -> PageResult[dict]:
@@ -48,18 +56,20 @@ def create_entry(payload: EntryPayload) -> ActionResult:
     return ActionResult(ok=True, message="水泵机组已登记", entry=entry)
 
 
-@router.post("/{entry_id}/actions", response_model=ActionResult)
-def run_action(entry_id: int, payload: EntryPayload) -> ActionResult:
-    """对单条水泵机组执行切换备用、故障停机、启用备用；不允许的动作会被拦下并说明原因。"""
-    action = str(payload.values.get("action") or "").strip()
-    entry, message = service.run_action(entry_id, action)
+@router.post("/{entry_id}/run-records", response_model=ActionResult)
+def submit_run_record(entry_id: int, payload: EntryPayload) -> ActionResult:
+    """提交单台机组的运行电流、累计运行时间与轴承温度；数据只落在该机组记录上。"""
+    entry, message = service.submit_run_record(entry_id, payload.values)
     if entry is None:
         return ActionResult(ok=False, message=message)
     return ActionResult(ok=True, message=message, entry=entry)
 
 
-@router.get("/export")
-def export_entries() -> dict[str, Any]:
-    """导出泵站运行清单：返回当前过滤条件下的全量数据。"""
-    items, total = service.list_entries(page=1, size=10000)
-    return {"module": "pump", "total": total, "items": items}
+@router.post("/{entry_id}/actions", response_model=ActionResult)
+def run_action(entry_id: int, payload: EntryPayload) -> ActionResult:
+    """对单台水泵机组执行状态流转；已停机机组锁定，非法动作会被拦下并说明原因。"""
+    action = str(payload.values.get("action") or "").strip()
+    entry, message = service.run_action(entry_id, action)
+    if entry is None:
+        return ActionResult(ok=False, message=message)
+    return ActionResult(ok=True, message=message, entry=entry)

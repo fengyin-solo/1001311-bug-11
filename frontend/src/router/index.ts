@@ -12,6 +12,7 @@ const Labtest = () => import('@/views/labtest/index.vue')
 const Reagent = () => import('@/views/reagent/index.vue')
 const Equip = () => import('@/views/equip/index.vue')
 const Pump = () => import('@/views/pump/index.vue')
+const PumpDetail = () => import('@/views/pump/detail.vue')
 const Power = () => import('@/views/power/index.vue')
 const Pipe = () => import('@/views/pipe/index.vue')
 const Lift = () => import('@/views/lift/index.vue')
@@ -37,6 +38,7 @@ const router = createRouter({
     { path: '/reagent', name: 'reagent', component: Reagent },
     { path: '/equip', name: 'equip', component: Equip },
     { path: '/pump', name: 'pump', component: Pump },
+    { path: '/pump/:id', name: 'pump-detail', component: PumpDetail },
     { path: '/power', name: 'power', component: Power },
     { path: '/pipe', name: 'pipe', component: Pipe },
     { path: '/lift', name: 'lift', component: Lift },
